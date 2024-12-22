@@ -1,0 +1,10 @@
+<!-- templates/document_preview.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Document Preview: {{ doc_name }}</h2>
+<p><strong>Document ID:</strong> {{ doc_id }}</p>
+<hr>
+<p>{{ preview }}</p>
+<a href="{{ url_for('index') }}">Back to Search</a>
+{% endblock %}

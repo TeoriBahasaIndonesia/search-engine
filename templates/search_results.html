@@ -1,0 +1,25 @@
+<!-- templates/search_results.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Search Results for "{{ query }}"</h2>
+<p>Retrieval Method: <strong>{{ method.replace('_', ' ').upper() }}</strong></p>
+<p>Time taken: <strong>{{ '%.4f'|format(search_time) }}</strong> seconds</p>
+
+{% if results %}
+    <ul class="list-group">
+        {% for score, doc_id in results %}
+            <li class="list-group-item">
+                <h5>
+                    <a href="{{ url_for('document_preview', doc_id=doc_id) }}">{{ DOCUMENTS[doc_id].title if DOCUMENTS.get(doc_id) else doc_id }}</a>
+                </h5>
+                <p>Score: {{ '%.4f'|format(score) }}</p>
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <div class="alert alert-warning" role="alert">
+        No results found for your query.
+    </div>
+{% endif %}
+{% endblock %}

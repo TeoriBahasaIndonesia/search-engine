@@ -1,0 +1,28 @@
+# Basic web framework
+Flask==3.1.0
+
+# Data manipulation
+pandas==2.2.3
+numpy==2.2.1
+
+# IR & NLP
+python-terrier==0.12.1
+
+# Datasets handling
+datasets==3.2.0
+
+# Model downloading from Google Drive
+gdown==5.2.0
+
+# Learning to Rank (XGBoost)
+xgboost==2.1.0
+
+# (Optional) If you are using scikit-learn-based pipelines
+scikit-learn==1.6.0
+
+ir-datasets==0.5.9
+
+porter2stemmer==1.0
+nltk==3.9.1
+
+tqdm==4.67.1
