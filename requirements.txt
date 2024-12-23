@@ -26,3 +26,4 @@ porter2stemmer==1.0
 nltk==3.9.1
 
 tqdm==4.67.1
+gunicorn==23.0.0
