@@ -3,10 +3,10 @@ import pandas as pd
 import json
 import os
 
-if not pt.started():
-  pt.init(version='snapshot')
+# if not pt.started():
+#   pt.init(version='snapshot')
 
-# pt.terrier.set_version('snapshot')
+pt.terrier.set_version('snapshot')
 
 def create_dataset():
     print("Me-load dataset...")
