@@ -1,8 +1,7 @@
 # Proyek Akhir CSCE604135 - Temu-Balik Informasi
 Anggota:
-1. Afiq Ilyasa Akmal
-2. Ardhito Nurhadyansah
-3. Mohammad Arvin
+1. Afiq Ilyasa Akmal - 2106751291
+2. Ardhito Nurhadyansah - 2106750206 
 
 ## Instalasi
 1. Program ini menggunakan Python versi 3.9.10. Pastikan anda menggunakan versi tersebut juga (kami sudah mencoba versi yang lebih tinggi tapi menemui error ketika menginstall library terkait).
