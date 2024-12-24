@@ -27,3 +27,5 @@ nltk==3.9.1
 
 tqdm==4.67.1
 gunicorn==23.0.0
+
+sentence-transformers==3.3.1

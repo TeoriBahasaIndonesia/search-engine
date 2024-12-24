@@ -1,163 +1,104 @@
-# ASUMSI untuk tugas ini adalah hasil retrieval BM25 adalah ground truth
-# Anda akan mengevaluasi hasil retrieval oleh TF-IDF, seberapa baik hasilnya
-
-# Anda diberikan file queries.txt yang berisi nama query yang akan dijadikan sebagai data pengujian
-# Lakukan retrieval BM25 top-20 untuk masing-masing query tersebut, lalu simpan output-nya
-# ke dalam text file "qrels.txt"
-
+import numpy as np
 from bsbi import BSBIIndex
 from tqdm import tqdm
 from compression import VBEPostings
 import math
+import json
+import pandas as pd
 
 BSBI_instance = BSBIIndex(data_dir='data',
                           postings_encoding=VBEPostings,
                           output_dir='index')
 
-def write_to_qrels(input_file='queries.txt', output_file='qrels.txt', k=20):
+def read_qrels(file_path):
     """
-    Fungsi ini untuk membuat data qrels, dengan asumsi bahwa hasil retrieval
-    BM25 yang menjadi ground truth. Gunakan default parameter BM25 saja.
-
-    Format output di text file:
+    Read qrels data from TSV file and store in a dictionary.
 
     Parameters
     ----------
-    input_file: str
-        nama file input yang berisi queries
-    output_file: str
-        nama file untuk qrels
-    k: int
-        top-k results yang akan di-retrieve
-    """
-    queries = {}
+    file_path: str
+        Path to the qrels file (train.tsv or test.tsv).
 
-    with open(input_file) as f:
-        parsed_by_nl = str(f.read()).split("\n")
-        for q in parsed_by_nl:
-            q_splitted = q.split()
-            queries[q_splitted[0]] = " ".join(q_splitted[1:])
-    
-    result = ""
-    for q_id, query in tqdm(queries.items()):
-        for (_, doc) in BSBI_instance.retrieve_bm25_taat(query, k):
-            result += f"{q_id} {doc}\n"
-    
-    with open(output_file, "w") as f:
-        f.write(result)
-    
-    print("Finish generating qrels!\n")
-
-def read_from_qrels(input_file='qrels.txt'):
-    """
-    Fungsi ini membaca file qrels, lalu menyimpannya dalam sebuah dictionary.
-
-    Parameters
-    ----------
-    input_file: str
-        nama file input qrels
-    
     Returns
     -------
     dict(str, List[str])
-        key berupa query ID, value berupa list of document filenames
+        Dictionary with query-id as keys and list of relevant corpus-ids as values.
     """
-    # TODO
-    
+    qrels = pd.read_csv(file_path, sep='\t')
     q_docs_dict = {}
-    with open(input_file, 'r') as f:
-        for line in f:
-            q_id, doc_name = line.strip().split()
+    for _, row in qrels.iterrows():
+        q_id, corpus_id, score = row["query-id"], row["corpus-id"], row["score"]
+        if score > 0:
             if q_id not in q_docs_dict:
-                q_docs_dict[q_id] = []
-            q_docs_dict[q_id].append(doc_name)
+                q_docs_dict[str(q_id)] = []
+            q_docs_dict[str(q_id)].append(str(corpus_id))
     return q_docs_dict
 
-def retrieve_and_generate_binary_relevancy_vector(q_docs_dict, queries_input='queries.txt', k=20):
+def read_queries(file_path):
     """
-    Fungsi ini melakukan retrieval dengan TF-IDF, lalu hasilnya dibandingkan
-    dengan ground truth di qrels.txt.
+    Read queries from a JSONL file.
 
-    Lakukan looping di semua dokumen hasil retrieval TF-IDF, lalu berikan nilai
-    0 untuk dokumen yang ada di TF-IDF tapi tidak ada di qrels, dan berikan nilai
-    1 untuk dokumen yang ada di keduanya.
+    Parameters
+    ----------
+    file_path: str
+        Path to the queries JSONL file.
 
-    Misalnya:   ground truth = [D1, D3, D10, D12, D15]
-                prediksi/retrieval = [D2, D1, D4, D10, D12]
-                hasil = [0, 1, 0, 1, 1]
-    
+    Returns
+    -------
+    dict
+        Dictionary with query IDs as keys and query text as values.
+    """
+    queries = {}
+    with open(file_path, 'r') as f:
+        for line in f:
+            query = json.loads(line)
+            queries[query['_id']] = query['text']
+    return queries
+
+def retrieve_and_generate_binary_relevancy_vector(q_docs_dict, queries, k=5):
+    """
+    Perform retrieval using TF-IDF, then compare the results to the ground truth in qrels.
+
     Parameters
     ----------
     q_docs_dict: dict(str, List[str])
-        dictionary dengan key berupa query ID dan value berupa list of relevant docs
-    queries_input: str
-        path ke file yang berisi mapping query id dan query
+        Dictionary with query IDs as keys and relevant corpus-ids as values.
+    queries: dict(str, str)
+        Dictionary with query IDs as keys and query text as values.
     k: int
-        top-k result yang diinginkan
-    
+        Top-k results to retrieve.
+
     Returns
     -------
     dict(str, List[int])
-        key berupa query id, value berupa binary vector yang menunjukkan relevansi/ranking
+        Dictionary with query ID as keys and binary vectors indicating relevancy as values.
     """
-    # TODO
-
     q_ranking_dict = {}
-    with open(queries_input, 'r') as f:
-        queries = {}
-        for line in f:
-            tokens = line.strip().split()
-            if tokens:
-                q_id = tokens[0]
-                query = ' '.join(tokens[1:])
-                queries[q_id] = query
-                
-    # Benchmarking dengan hasil dari BM25 
     for q_id, query in tqdm(queries.items()):
+        
         retrieved_docs = [doc for (_, doc) in BSBI_instance.retrieve_tfidf_taat(query, k)]
-        ground_truth_docs = q_docs_dict.get(q_id, [])
+        ground_truth_docs = q_docs_dict.get((q_id), [])
         binary_relevancy_vector = [1 if doc in ground_truth_docs else 0 for doc in retrieved_docs]
         q_ranking_dict[q_id] = binary_relevancy_vector
     return q_ranking_dict
 
 class Metrics:
-    """
-    Class yang berisi implementasi metrik-metrik yang akan diuji coba.
-
-    Parameters
-    ----------
-    ranking: List[int]
-        binary vector yang menunjukkan ranking
-    """
     def __init__(self, ranking):
         self.ranking = ranking
     
     def rbp(self, p=0.8):
-        """
-        Rank-biased Precision (RBP)
-        """
-        # TODO
         rbp_score = 0.0
         for i, rel in enumerate(self.ranking):
             rbp_score += rel * (p ** i)
         return (1 - p) * rbp_score
     
     def dcg(self):
-        """
-        Discounted Cumulative Gain (DCG)
-        Gunakan log basis 2
-        """
-        # TODO
         dcg_score = 0.0
         for i, rel in enumerate(self.ranking):
             dcg_score += rel / math.log2(i + 2)
         return dcg_score
     
     def ndcg(self):
-        """
-        Normalized DCG
-        """
-        # TODO
         ideal_ranking = sorted(self.ranking, reverse=True)
         ideal_dcg = 0.0
         for i, rel in enumerate(ideal_ranking):
@@ -166,18 +107,10 @@ class Metrics:
         return actual_dcg / ideal_dcg if ideal_dcg > 0 else 0.0
 
     def prec(self, k):
-        """
-        Precision@K
-        """
-        # TODO
         relevant = self.ranking[:k]
         return sum(relevant) / k if k > 0 else 0.0
 
     def ap(self):
-        """
-        Average Precision
-        """
-        # TODO
         num_relevant = sum(self.ranking)
         if num_relevant == 0:
             return 0.0
@@ -190,29 +123,28 @@ class Metrics:
         return cumulative_precision / num_relevant
 
 if __name__ == '__main__':
+    q_docs_dict = read_qrels('qrels/train.tsv')
+    queries = read_queries('queries_train.jsonl')
     
-    write_to_qrels()
-    q_docs_dict = read_from_qrels()
-    q_ranking_dict = retrieve_and_generate_binary_relevancy_vector(q_docs_dict)
+    q_ranking_dict = retrieve_and_generate_binary_relevancy_vector(q_docs_dict, queries)
 
     eval = {
         "rbp": [],
         "dcg": [],
         "ndcg": [],
         "prec@5": [],
-        "prec@10": [],
         "ap": []
-    }    
+        # "prec@10": [],
+    }
 
-    for (_, ranking) in q_ranking_dict.items():
+    for _, ranking in q_ranking_dict.items():
         metrics = Metrics(ranking)
         eval['rbp'].append(metrics.rbp())
         eval['dcg'].append(metrics.dcg())
         eval['ndcg'].append(metrics.ndcg())
         eval['prec@5'].append(metrics.prec(5))
-        eval['prec@10'].append(metrics.prec(10))
         eval['ap'].append(metrics.ap())
+        # eval['prec@10'].append(metrics.prec(10))
 
-    # average of all queries
     for metric, scores in eval.items():
         print(f"Metrik {metric}: {sum(scores)/len(scores)}")

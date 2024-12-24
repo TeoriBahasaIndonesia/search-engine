@@ -135,6 +135,7 @@ def merge_and_sort_posts_and_tfs(posts_tfs1, posts_tfs2):
     return result
 
 
+
 if __name__ == '__main__':
 
     doc = ["halo", "semua", "selamat", "pagi", "semua"]

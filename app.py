@@ -1,4 +1,5 @@
 # app.py
+import pickle
 from flask import Flask, render_template, request, jsonify
 import time
 import os
@@ -8,7 +9,8 @@ import json
 import xgboost as xgb
 import numpy as np
 
-from ltr import extract_features, rerank_with_model
+from load_doc import load_corpus
+from ltr import rerank_with_model
 
 
 app = Flask(__name__)
@@ -41,29 +43,15 @@ BSBI_INSTANCE = BSBIIndex(
 )
 BSBI_INSTANCE.load() 
 
-LTR_MODEL_PATH = os.path.join('.', 'ltr_model.xgb')
-ltr_model = xgb.Booster()
-ltr_model.load_model(LTR_MODEL_PATH)
+LTR_MODEL_PATH = os.path.join('.', 'ltr_model_ce.pkl')
+with open(LTR_MODEL_PATH, 'rb') as f:
+    ltr_model = pickle.load(f)
 
 # corpus.jsonl into a dictionary for quick access
 CORPUS_PATH = os.path.join(BSBI_INSTANCE.data_dir, 'corpus.jsonl')
 DOCUMENTS = {}
 
-def load_corpus(corpus_path):
-    global DOCUMENTS
-    try:
-        with open(corpus_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                if not line.strip():
-                    continue
-                doc = json.loads(line)
-                doc_id = doc.get('_id')
-                if doc_id:
-                    DOCUMENTS[doc_id] = doc
-    except FileNotFoundError:
-        print(f"Corpus file not found at {corpus_path}. Ensure the path is correct.")
-
-load_corpus(CORPUS_PATH)
+DOCUMENTS = load_corpus(CORPUS_PATH)
 
 
 @app.route('/')
@@ -89,9 +77,9 @@ def search():
     elif method == 'bm25_taat':
         results = BSBI_INSTANCE.retrieve_bm25_taat(query, k=k)
     elif method == 'ltr':
-        results = rerank_with_model(ltr_model, query, top_k=k)
+        results = rerank_with_model(ltr_model, query, top_k=k, bsbi_instance=BSBI_INSTANCE, documents=DOCUMENTS)
     else:
-        results = rerank_with_model(ltr_model, query, top_k=k) 
+        results = rerank_with_model(ltr_model, query, top_k=k, bsbi_instance=BSBI_INSTANCE, documents=DOCUMENTS)
 
     end_time = time.time()
     search_time = end_time - start_time
