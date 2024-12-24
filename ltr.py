@@ -1,5 +1,6 @@
 import json
 import pandas as pd
+from sentence_transformers import CrossEncoder
 from bsbi import BSBIIndex
 from compression import VBEPostings
 from exp_evaluation import Metrics
@@ -137,26 +138,25 @@ def get_doc_length(doc_name):
     return 0.0
  
 
-def extract_features(query, doc_name, bsbi_instance=None):
-    from porter2stemmer import Porter2Stemmer
+def extract_features(query, docs):
     """
-    Extract features directly using InvertedIndexReader for a query-document pair.
+    Extract features for LTR from query and documents.
+
+    Parameters
+    ----------
+    query : str
+        The query text.
+    docs : List[Tuple[str, str]]
+        List of tuples containing document IDs and their text.
+
+    Returns
+    -------
+    np.ndarray
+        Feature matrix for the documents.
     """
-    
-    if not bsbi_instance:
-        bsbi_instance = BSBIIndex(data_dir='data',
-                          postings_encoding=VBEPostings,
-                          output_dir='index')
-        
-    query_terms = [Porter2Stemmer().stem(token.lower()) for token in query.split()]
-    doc_id = bsbi_instance.doc_id_map[doc_name]
-
-    with InvertedIndexReader(bsbi_instance.index_name, bsbi_instance.postings_encoding, directory=bsbi_instance.output_dir) as index:
-        bm25_score, tfidf_score = index.get_document_scores(query_terms, doc_id, bsbi_instance.term_id_map)
-
-    # Feature vector
-    doc_length = index.doc_length.get(doc_id, 0)
-    return [bm25_score, tfidf_score, doc_length]
+    encoder = CrossEncoder('cross-encoder/ms-marco-TinyBERT-L-6')
+    features = np.array([encoder.predict([(query, doc[1])]) for doc in docs])
+    return features
 
 
 # -------------------------------------------------------------------------
@@ -241,34 +241,34 @@ def train_xgb_ranker(X, y, qid_list):
 # -------------------------------------------------------------------------
 # 6. RE-RANK / TEST / EVALUATE
 # -------------------------------------------------------------------------
-
-def rerank_with_model(model, query_text, top_k=50, bsbi_instance=None):
+def rerank_with_model(model, query, top_k, bsbi_instance, documents):
     """
-    1) Get top-K docs from BM25
-    2) For each doc, extract features
-    3) Predict with the model
-    4) Sort descending by predicted score
-    5) Return list of (pred_score, docName)
+    Re-rank documents using the LTR model.
+
+    Parameters
+    ----------
+    model : RandomForestClassifier
+        The trained LTR model.
+    query : str
+        The query text.
+    top_k : int
+        Number of top documents to return after re-ranking.
+    bsbi_instance : BSBIIndex
+        The instance of BSBIIndex for retrieval.
+    documents : dict
+        The corpus documents as a dictionary.
+
+    Returns
+    -------
+    List[Tuple[float, str]]
+        List of tuples containing scores and document IDs.
     """
-    if not bsbi_instance:
-        bsbi_instance = BSBIIndex(data_dir='data',
-                          postings_encoding=VBEPostings,
-                          output_dir='index')
-
-    results = bsbi_instance.retrieve_bm25_taat(query_text, k=top_k)
-    doc_features = []
-    doc_names = []
-    for (_, doc_name) in results:
-        feats = extract_features(query_text, doc_name)
-        doc_features.append(feats)
-        doc_names.append(doc_name)
-
-    dtest = xgb.DMatrix(np.array(doc_features))
-    preds = model.predict(dtest)
-
-    doc_pred_pairs = list(zip(preds, doc_names))
-    doc_pred_pairs.sort(key=lambda x: x[0], reverse=True)  # high→low
-    return doc_pred_pairs
+    bm25_results = bsbi_instance.retrieve_bm25_taat(query, k=30)
+    docs = [(doc_id, documents.get(doc_id, {}).get('text', '')) for (_, doc_id) in bm25_results if doc_id in documents]
+    features = extract_features(query, docs)  # This should return np.ndarray
+    scores = model.predict_proba(features)[:, 1]  # Class 1 probabilities
+    ranked_docs = sorted(zip(scores, [doc[0] for doc in docs]), reverse=True)[:top_k]
+    return ranked_docs
 
 
 def evaluate_model(model, queries_dict, qrels_dict, top_k=20):

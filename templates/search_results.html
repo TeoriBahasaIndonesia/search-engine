@@ -8,12 +8,21 @@
 
 {% if results %}
     <ul class="list-group">
-        {% for score, doc_id in results %}
+        {% for _, doc_id in results %}
             <li class="list-group-item">
                 <h5>
-                    <a href="{{ url_for('document_preview', doc_id=doc_id) }}">{{ DOCUMENTS[doc_id].title if DOCUMENTS.get(doc_id) else doc_id }}</a>
+                    <a href="{{ url_for('document_preview', doc_id=doc_id) }}">
+                        {{ DOCUMENTS[doc_id].title if DOCUMENTS.get(doc_id) else "Document " ~ doc_id }}
+                    </a>
                 </h5>
-                <p>Score: {{ '%.4f'|format(score) }}</p>
+                {% if DOCUMENTS.get(doc_id) %}
+                    <p>
+                        <strong>Content:</strong>
+                        {{ DOCUMENTS[doc_id].text[:300] if DOCUMENTS[doc_id].text else "No content available." }}...
+                    </p>
+                {% else %}
+                    <p><strong>Content:</strong> No content available.</p>
+                {% endif %}
             </li>
         {% endfor %}
     </ul>
@@ -22,4 +31,10 @@
         No results found for your query.
     </div>
 {% endif %}
+
+<p>
+    <a href="{{ url_for('index') }}" class="btn btn-primary">New Search</a>
+</p>
 {% endblock %}
+
+
